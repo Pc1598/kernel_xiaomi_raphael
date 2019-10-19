@@ -559,7 +559,7 @@
 		android {
 			compatible = "android,firmware";
 			shared_meta: vbmeta {
-				parts = "vbmeta,boot,system,vendor,dtbo,odm";
+				parts = "vbmeta,boot,system,vendor,dtbo";
 			};
 		};
 	};
