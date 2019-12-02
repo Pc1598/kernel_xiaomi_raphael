@@ -182,6 +182,12 @@ int backlight_device_set_brightness(struct backlight_device *bd,
 		if (brightness > bd->props.max_brightness)
 			rc = -EINVAL;
 		else {
+			if ((!bd->use_count && brightness) || (bd->use_count && !brightness)) {
+				if (!bd->use_count)
+					bd->use_count++;
+				else
+					bd->use_count--;
+			}
 			pr_debug("set brightness to %lu\n", brightness);
 			if (!brightness) {
 				bl_event = BACKLIGHT_OFF;
