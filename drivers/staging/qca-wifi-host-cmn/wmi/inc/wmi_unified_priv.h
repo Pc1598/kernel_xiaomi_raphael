@@ -291,7 +291,6 @@ enum WMI_RECORD_TYPE {
 	WMI_EVT = 2,
 };
 
-
 #else
 
 #define wmi_alert(params...) ((void)0)
