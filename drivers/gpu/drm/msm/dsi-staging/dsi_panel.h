@@ -169,6 +169,12 @@ struct drm_panel_esd_config {
 	u32 groups;
 };
 
+#define BRIGHTNESS_ALPHA_PAIR_LEN 2
+struct brightness_alpha_pair {
+	u16 brightness;
+	u8 alpha;
+};
+
 struct dsi_panel {
 	const char *name;
 	const char *type;
@@ -223,6 +229,9 @@ struct dsi_panel {
 	u32 fod_dim_lut_count;
 	int hbm_mode;
 	bool resend_ea;
+
+	struct brightness_alpha_pair *fod_dim_lut;
+	unsigned int fod_dim_lut_len;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
