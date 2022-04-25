@@ -168,8 +168,8 @@ static enum tfa_error tfa98xx_tfa_start(struct tfa98xx *tfa98xx, int next_profil
 			pr_err("Error, setting calibration value in mtp, err=%d\n", err_cal);
 		} else {
 			tfa98xx->set_mtp_cal = false;
-			pr_debug("Calibration value (%d) set in mtp\n",
-				tfa98xx->cal_data);
+			pr_debug_once("Calibration value (%d) set in mtp\n",
+			        tfa98xx->cal_data);
 		}
 	}
 
@@ -477,10 +477,10 @@ static ssize_t tfa98xx_dbgfs_start_set(struct file *file,
 	mutex_unlock(&tfa98xx->dsp_lock);
 
 	if (ret) {
-		pr_info("[0x%x] Calibration start failed (%d)\n", tfa98xx->i2c->addr, ret);
+		pr_debug_once("[0x%x] Calibration start failed (%d)\n", tfa98xx->i2c->addr, ret);
 		return -EIO;
 	} else {
-		pr_debug("[0x%x] Calibration started\n", tfa98xx->i2c->addr);
+		pr_debug_once("[0x%x] Calibration started\n", tfa98xx->i2c->addr);
 	}
 
 	return count;
@@ -533,7 +533,7 @@ static ssize_t tfa98xx_dbgfs_r_read(struct file *file,
 			tfa98xx->tfa->mohm[0]);
 	}
 
-	pr_debug("[0x%x] calib_done: %s", tfa98xx->i2c->addr, str);
+	pr_debug_once("[0x%x] calib_done: %s", tfa98xx->i2c->addr, str);
 
 	if (ret < 0)
 		goto r_err;
@@ -667,7 +667,7 @@ static ssize_t tfa98xx_dbgfs_dsp_state_get(struct file *file,
 		str = "Invalid\n";
 	}
 
-	pr_debug("[0x%x] dsp_state : %s\n", tfa98xx->i2c->addr, str);
+	pr_debug_once("[0x%x] dsp_state : %s\n", tfa98xx->i2c->addr, str);
 
 	ret = simple_read_from_buffer(user_buf, count, ppos, str, strlen(str));
 	return ret;
@@ -694,23 +694,23 @@ static ssize_t tfa98xx_dbgfs_dsp_state_set(struct file *file,
 
 	/* Compare strings, excluding the trailing \0 */
 	if (!strncmp(buf, start_cmd, sizeof(start_cmd) - 1)) {
-		pr_info("[0x%x] Manual triggering of dsp start...\n", tfa98xx->i2c->addr);
+		pr_debug_once("[0x%x] Manual triggering of dsp start...\n", tfa98xx->i2c->addr);
 		mutex_lock(&tfa98xx->dsp_lock);
 		ret = tfa98xx_tfa_start(tfa98xx, tfa98xx->profile, tfa98xx->vstep);
 		mutex_unlock(&tfa98xx->dsp_lock);
 		pr_debug("[0x%x] tfa_dev_start complete: %d\n", tfa98xx->i2c->addr, ret);
 	} else if (!strncmp(buf, stop_cmd, sizeof(stop_cmd) - 1)) {
-		pr_info("[0x%x] Manual triggering of dsp stop...\n", tfa98xx->i2c->addr);
+		pr_debug_once("[0x%x] Manual triggering of dsp stop...\n",  tfa98xx->i2c->addr);
 		mutex_lock(&tfa98xx->dsp_lock);
 		ret = tfa_dev_stop(tfa98xx->tfa);
 		mutex_unlock(&tfa98xx->dsp_lock);
 		pr_debug("[0x%x] tfa_dev_stop complete: %d\n", tfa98xx->i2c->addr, ret);
 	} else if (!strncmp(buf, mon_start_cmd, sizeof(mon_start_cmd) - 1)) {
-		pr_info("[0x%x] Manual start of monitor thread...\n", tfa98xx->i2c->addr);
+		pr_debug_once("[0x%x] Manual start of monitor thread...\n",  tfa98xx->i2c->addr);
 		queue_delayed_work(system_power_efficient_wq,
 			&tfa98xx->monitor_work, HZ);
 	} else if (!strncmp(buf, mon_stop_cmd, sizeof(mon_stop_cmd) - 1)) {
-		pr_info("[0x%x] Manual stop of monitor thread...\n", tfa98xx->i2c->addr);
+		pr_debug_once("[0x%x] Manual stop of monitor thread...\n",  tfa98xx->i2c->addr);
 		cancel_delayed_work_sync(&tfa98xx->monitor_work);
 	} else {
 		return -EINVAL;
@@ -744,7 +744,7 @@ static ssize_t tfa98xx_dbgfs_fw_state_get(struct file *file,
 		str = "Invalid\n";
 	}
 
-	pr_debug("[0x%x] fw_state : %s", tfa98xx->i2c->addr, str);
+	pr_debug_once("[0x%x] fw_state : %s", tfa98xx->i2c->addr, str);
 
 	return simple_read_from_buffer(user_buf, count, ppos, str, strlen(str));
 }
@@ -1138,7 +1138,7 @@ static int add_sr_to_profile(struct tfa98xx *tfa98xx, char *basename, int len, i
 			/* enter the (container)profile for this samplerate at the corresponding index */
 			bprof->sr_rate_sup[idx] = profile;
 
-			pr_debug("added profile:samplerate = [%d:%d] for mixer profile: %s\n", profile, sr, bprof->basename);
+			pr_debug_once("added profile:samplerate = [%d:%d] for mixer profile: %s\n", profile, sr, bprof->basename);
 		}
 	}
 
@@ -1243,7 +1243,7 @@ static int tfa98xx_set_vstep(struct snd_kcontrol *kcontrol,
 				if (err) {
 					pr_err("Write vstep error: %d\n", err);
 				} else {
-					pr_debug("Succesfully changed vstep index!\n");
+					pr_debug_once("Succesfully changed vstep index!\n");
 					change = 1;
 				}
 			}
@@ -1252,7 +1252,7 @@ static int tfa98xx_set_vstep(struct snd_kcontrol *kcontrol,
 #ifndef TFA98XX_ALSA_CTRL_PROF_CHG_ON_VOL
 		}
 #endif
-		pr_debug("%d: vstep:%d, (control value: %d) - profile %d\n",
+		pr_debug_once("%d: vstep:%d, (control value: %d) - profile %d\n",
 			tfa98xx->tfa->dev_idx, new_vstep, value, profile);
 	}
 
@@ -1294,8 +1294,8 @@ static int tfa98xx_info_vstep(struct snd_kcontrol *kcontrol,
 	mutex_unlock(&tfa98xx_mutex);
 	uinfo->value.integer.min = 0;
 	uinfo->value.integer.max = max(0, tfacont_get_max_vstep(tfa98xx->tfa, profile) - 1);
-	pr_debug("vsteps count: %d [prof=%d]\n", tfacont_get_max_vstep(tfa98xx->tfa, profile),
-		profile);
+	pr_debug_once("vsteps count: %d [prof=%d]\n", tfacont_get_max_vstep(tfa98xx->tfa, profile),
+			profile);
 	return 0;
 }
 
@@ -1345,8 +1345,8 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 			tfa98xx->rate, profile, new_profile);
 		return 0;
 	}
-	pr_debug("selected container profile [%d -> %d]\n", cur_prof_idx, prof_idx);
-	pr_debug("switch profile [%s -> %s]\n",
+	pr_debug_once("selected container profile [%d -> %d]\n", cur_prof_idx, prof_idx);
+	pr_debug_once("switch profile [%s -> %s]\n",
 		tfa_cont_profile_name(tfa98xx, cur_prof_idx),
 		tfa_cont_profile_name(tfa98xx, prof_idx));
 
@@ -1369,7 +1369,7 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 			mutex_lock(&tfa98xx->dsp_lock);
 			tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
 			if (strstr(tfa_cont_profile_name(tfa98xx, cur_prof_idx), ".standby") != NULL) {
-				pr_info("Force to start at exiting from standby: [%d -> %d]\n",
+				pr_debug_once("Force to start at exiting from standby: [%d -> %d]\n",
 					cur_prof_idx, prof_idx);
 				ready = 1;
 			}
@@ -1467,7 +1467,7 @@ static int tfa98xx_set_stop_ctl(struct snd_kcontrol *kcontrol,
 		int ready = 0;
 		int i = tfa98xx->tfa->dev_idx;
 
-		pr_debug("%d: %ld\n", i, ucontrol->value.integer.value[i]);
+		pr_debug_once("%d: %ld\n", i, ucontrol->value.integer.value[i]);
 
 		tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
 
@@ -1565,8 +1565,8 @@ static int tfa98xx_set_cal_ctl(struct snd_kcontrol *kcontrol,
 		err = tfa98xx_write_re25(tfa98xx->tfa, tfa98xx->cal_data);
 		tfa98xx->set_mtp_cal = (err != tfa_error_ok);
 		if (tfa98xx->set_mtp_cal == false) {
-			pr_debug("Calibration value (%d) set in mtp\n",
-				tfa98xx->cal_data);
+			pr_debug_once("Calibration value (%d) set in mtp\n",
+			        tfa98xx->cal_data);
 		}
 		mutex_unlock(&tfa98xx->dsp_lock);
 	}
@@ -1672,7 +1672,7 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 			list_add(&bprofile->list, &profile_list);
 			bprofile->item_id = id++;
 
-			pr_debug("profile added [%d]: %s\n", bprofile->item_id, bprofile->basename);
+			pr_debug_once("profile added [%d]: %s\n", bprofile->item_id, bprofile->basename);
 
 			if (tfacont_get_max_vstep(tfa98xx->tfa, prof)) {
 				name = devm_kzalloc(tfa98xx->codec->dev, MAX_CONTROL_NAME, GFP_KERNEL);
@@ -2158,7 +2158,7 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 		return;
 	}
 
-	pr_debug("loaded %s - size: %zu\n", fw_name, cont->size);
+	pr_debug_once("loaded %s - size: %zu\n", fw_name, cont->size);
 
 	if (tfa98xx_container == NULL) {
 		container = kzalloc(cont->size, GFP_KERNEL);
@@ -2170,12 +2170,12 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 		container_size = cont->size;
 		memcpy(container, cont->data, container_size);
 
-		pr_debug("%.2s%.2s\n", container->version, container->subversion);
-		pr_debug("%.8s\n", container->customer);
-		pr_debug("%.8s\n", container->application);
-		pr_debug("%.8s\n", container->type);
-		pr_debug("%d ndev\n", container->ndev);
-		pr_debug("%d nprof\n", container->nprof);
+		pr_debug_once("%.2s%.2s\n", container->version, container->subversion);
+		pr_debug_once("%.8s\n", container->customer);
+		pr_debug_once("%.8s\n", container->application);
+		pr_debug_once("%.8s\n", container->type);
+		pr_debug_once("%d ndev\n", container->ndev);
+		pr_debug_once("%d nprof\n", container->nprof);
 
 		tfa_err = tfa_load_cnt(container, container_size);
 		if (tfa_err != tfa_error_ok) {
@@ -2186,7 +2186,7 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 
 		tfa98xx_container = container;
 	} else {
-		pr_debug("container file already loaded...\n");
+		pr_debug_once("container file already loaded...\n");
 		container = tfa98xx_container;
 	}
 
@@ -2248,7 +2248,7 @@ static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 	}
 
 	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_OK;
-	pr_debug("Firmware init complete\n");
+	pr_debug_once("Firmware init complete\n");
 
 	if (no_start != 0)
 		return;
@@ -2557,7 +2557,7 @@ static int tfa98xx_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	struct tfa98xx *tfa98xx = snd_soc_codec_get_drvdata(dai->codec);
 	struct snd_soc_codec *codec = dai->codec;
 #endif
-	pr_debug("fmt=0x%x\n", fmt);
+        pr_debug_once("fmt=0x%x\n", fmt);
 
 	/* Supported mode: regular I2S, slave, or PDM */
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
@@ -2763,7 +2763,7 @@ static int tfa98xx_probe(struct snd_soc_codec *codec)
 	tfa98xx->codec = codec;
 
 	ret = tfa98xx_load_container(tfa98xx);
-	pr_debug("Container loading requested: %d\n", ret);
+	pr_debug_once("Container loading requested: %d\n", ret);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0)
 	codec->control_data = tfa98xx->regmap;
@@ -3696,7 +3696,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	unsigned int reg;
 	int ret;
 
-	pr_debug("addr=0x%x\n", i2c->addr);
+	pr_debug_once("addr=0x%x\n", i2c->addr);
 
 	if (!i2c_check_functionality(i2c->adapter, I2C_FUNC_I2C)) {
 		dev_err(&i2c->dev, "check_functionality failed\n");
@@ -3766,7 +3766,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 		}
 		switch (reg & 0xff) {
 		case 0x72: /* tfa9872 */
-			pr_info("TFA9872 detected\n");
+			pr_debug_once("TFA9872 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_CALIBRATION_CTL;
 			tfa98xx->flags |= TFA98XX_FLAG_REMOVE_PLOP_NOISE;
@@ -3781,7 +3781,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 			tfa98xx->flags |= TFA98XX_FLAG_ADAPT_NOISE_MODE; /***MCH_TO_TEST***/
 			break;
 		case 0x74: /* tfa9874 */
-			pr_info("TFA9874 detected\n");
+			pr_debug_once("TFA9874 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_CALIBRATION_CTL;
 			/* tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS; */
@@ -3805,49 +3805,49 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 			tfa98xx->flags |= TFA98XX_FLAG_OTP_TYPE_DEVICE;
 			break;
 		case 0x88: /* tfa9888 */
-			pr_info("TFA9888 detected\n");
+			pr_debug_once("TFA9888 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_STEREO_DEVICE;
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
 			break;
 		case 0x13: /* tfa9912 */
-			pr_info("TFA9912 detected\n");
+			pr_debug_once("TFA9912 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
 			/* tfa98xx->flags |= TFA98XX_FLAG_TAPDET_AVAILABLE; */
 			break;
 		case 0x94: /* tfa9894 */
-			pr_info("TFA9894 detected\n");
+			pr_debug_once("TFA9894 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			break;
 		case 0x80: /* tfa9890 */
 		case 0x81: /* tfa9890 */
-			pr_info("TFA9890 detected\n");
+			pr_debug_once("TFA9890 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			break;
 		case 0x92: /* tfa9891 */
-			pr_info("TFA9891 detected\n");
+			pr_debug_once("TFA9891 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_SAAM_AVAILABLE;
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			break;
 		case 0x12: /* tfa9895 */
-			pr_info("TFA9895 detected\n");
+			pr_debug_once("TFA9895 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			break;
 		case 0x97:
-			pr_info("TFA9897 detected\n");
+			pr_debug_once("TFA9897 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
 			break;
 		case 0x96:
-			pr_info("TFA9896 detected\n");
+			pr_debug_once("TFA9896 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
 			break;
 		default:
-			pr_info("Unsupported device revision (0x%x)\n", reg & 0xff);
+			pr_debug_once("Unsupported device revision (0x%x)\n", reg & 0xff);
 			return -EINVAL;
 		}
 	}
@@ -3923,7 +3923,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 		dev_info(&i2c->dev, "error creating sysfs files\n");
 	if (tfa98xx_device_count == 0)
 		tfa98xx_init_misc_device(tfa98xx);
-	pr_info("%s Probe completed successfully!\n", __func__);
+	pr_debug_once("%s Probe completed successfully!\n", __func__);
 
 	INIT_LIST_HEAD(&tfa98xx->list);
 
@@ -4018,8 +4018,7 @@ static int __init tfa98xx_i2c_init(void)
 {
 	int ret = 0;
 
-	pr_info("TFA98XX driver version %s\n", TFA98XX_VERSION);
-
+	pr_debug_once("TFA98xx driver version %s\n", TFA98XX_VERSION);
 	/* Enable debug traces */
 	tfa98xx_kmsg_regs = trace_level & 2;
 	tfa98xx_ftrace_regs = trace_level & 4;
