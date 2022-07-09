@@ -77,7 +77,7 @@ static int SPIDEV_MAJOR;
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
-static struct wakeup_source fp_wakelock;
+static struct wakeup_source *fp_wakelock = NULL;
 static struct gf_dev gf;
 
 struct gf_key_map maps[] = {
@@ -537,7 +537,8 @@ static irqreturn_t gf_irq(int irq, void *handle)
 	uint32_t key_input = 0;
 	temp[0] = GF_NET_EVENT_IRQ;
 	pr_debug("%s enter\n", __func__);
-	__pm_wakeup_event(&fp_wakelock, WAKELOCK_HOLD_TIME);
+	if(fp_wakelock != NULL)
+		__pm_wakeup_event(fp_wakelock, WAKELOCK_HOLD_TIME);
 	sendnlmsg(temp);
 
 #elif defined (GF_FASYNC)
@@ -870,9 +871,15 @@ static int gf_probe(struct platform_device *pdev)
 	gf_dev->notifier = goodix_noti_block;
 	drm_register_client(&gf_dev->notifier);
 	gf_dev->irq = gf_irq_num(gf_dev);
-	wakeup_source_init(&fp_wakelock, "fp_wakelock");
+	fp_wakelock = wakeup_source_register(&gf_dev->spi->dev, "fp_wakelock");
+	if (fp_wakelock==NULL)
+		goto error_wakelock;
 	pr_debug("version V%d.%d.%02d\n", VER_MAJOR, VER_MINOR, PATCH_LEVEL);
 	return status;
+
+error_wakelock:
+	pr_debug("create fp wakelock failed.\n");
+
 #ifdef AP_CONTROL_CLK
 gfspi_probe_clk_enable_failed:
 	gfspi_ioctl_clk_uninit(gf_dev);
@@ -909,7 +916,8 @@ static int gf_remove(struct platform_device *pdev)
 #endif
 {
 	struct gf_dev *gf_dev = &gf;
-	wakeup_source_trash(&fp_wakelock);
+	wakeup_source_unregister(fp_wakelock);
+	fp_wakelock = NULL;
 
 	/* make sure ops on existing fds can abort cleanly */
 	if (gf_dev->irq) {
