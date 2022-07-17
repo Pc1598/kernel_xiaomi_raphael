@@ -2279,9 +2279,6 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	core_data->tp_selftest_proc =
-		proc_create("tp_selftest", 0644, NULL, &gtp_selftest_ops);
-
 #ifdef CONFIG_GOODIX_HWINFO
 	core_data->dbclick_count = 0;
 #endif
