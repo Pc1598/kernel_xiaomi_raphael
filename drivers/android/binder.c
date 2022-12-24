@@ -1001,7 +1001,8 @@ static void binder_wakeup_poll_threads_ilocked(struct binder_proc *proc,
 			if (thread->task && current->signal &&
 				(current->signal->oom_score_adj == 0) &&
 				(current->prio < DEFAULT_PRIO))
-				thread->task->wts.low_latency = true;
+				thread->task->low_latency |=
+						WALT_LOW_LATENCY_BINDER;
 #endif
 			if (sync)
 				wake_up_interruptible_sync(&thread->wait);
@@ -1066,7 +1067,8 @@ static void binder_wakeup_thread_ilocked(struct binder_proc *proc,
 		if (thread->task && current->signal &&
 			(current->signal->oom_score_adj == 0) &&
 			(current->prio < DEFAULT_PRIO))
-			thread->task->wts.low_latency = true;
+			thread->task->low_latency |=
+					WALT_LOW_LATENCY_BINDER;
 #endif
 		if (sync)
 			wake_up_interruptible_sync(&thread->wait);
@@ -4475,8 +4477,9 @@ retry:
 
 		trace_binder_transaction_received(t);
 #ifdef CONFIG_SCHED_WALT
-		if (current->wts.low_latency)
-			current->wts.low_latency = false;
+		if (current->low_latency & WALT_LOW_LATENCY_BINDER)
+			thread->task->low_latency &=
+						~WALT_LOW_LATENCY_BINDER;
 #endif
 		binder_stat_br(proc, thread, cmd);
 		binder_debug(BINDER_DEBUG_TRANSACTION,
