@@ -176,12 +176,6 @@ struct drm_panel_esd_config {
 	u32 groups;
 };
 
-#define BRIGHTNESS_ALPHA_PAIR_LEN 2
-struct brightness_alpha_pair {
-	u32 brightness;
-	u32 alpha;
-};
-
 struct dsi_panel {
 	const char *name;
 	const char *type;
@@ -233,11 +227,8 @@ struct dsi_panel {
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
 
-	struct brightness_alpha_pair *fod_dim_lut;
 	u32 fod_dim_lut_count;
-
 	int hbm_mode;
-
 	bool resend_ea;
 };
 
@@ -358,10 +349,6 @@ struct dsi_panel *dsi_panel_ext_bridge_get(struct device *parent,
 int dsi_panel_parse_esd_reg_read_configs(struct dsi_panel *panel);
 
 void dsi_panel_ext_bridge_put(struct dsi_panel *panel);
-
-int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status);
-
-u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
 
 int dsi_panel_apply_hbm_mode(struct dsi_panel *panel);
 
