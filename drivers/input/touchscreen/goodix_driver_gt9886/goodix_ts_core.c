@@ -1744,7 +1744,7 @@ int goodix_ts_msm_drm_notifier_callback(struct notifier_block *self,
 			case MSM_DRM_BLANK_POWERDOWN:
 				goto suspend;
 				break;
-			case MSM_DRM_BLANK_LP:
+			case MSM_DRM_BLANK_LP1 || MSM_DRM_BLANK_LP2:
 				goto suspend;
 				break;
 			case MSM_DRM_BLANK_UNBLANK:
