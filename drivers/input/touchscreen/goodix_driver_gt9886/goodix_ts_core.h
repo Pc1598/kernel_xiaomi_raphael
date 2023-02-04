@@ -474,6 +474,7 @@ struct goodix_ts_core {
 	int aod_status;
 	int fod_pressed;
 	int fod_test;
+	int udfps_pressed;
 	int double_wakeup;
 	int result_type;
 	struct class *gtp_tp_class;
