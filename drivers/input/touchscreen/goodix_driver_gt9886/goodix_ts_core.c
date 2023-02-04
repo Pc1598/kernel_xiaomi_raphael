@@ -655,6 +655,13 @@ static ssize_t udfps_pressed_show(struct device *dev,
 	return scnprintf(buf, 10, "%i\n", core_data->udfps_pressed);
 }
 
+static ssize_t double_tap_pressed_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
+	return scnprintf(buf, 10, "%i\n", core_data->double_tap_pressed);
+}
+
 static DEVICE_ATTR(extmod_info, 0444, goodix_ts_extmod_show, NULL);
 static DEVICE_ATTR(driver_info, 0444, goodix_ts_driver_info_show, NULL);
 static DEVICE_ATTR(chip_info, 0444, goodix_ts_chip_info_show, NULL);
@@ -665,6 +672,7 @@ static DEVICE_ATTR(read_cfg, 0444, goodix_ts_read_cfg_show, NULL);
 static DEVICE_ATTR(irq_info, 0664,
 		goodix_ts_irq_info_show, goodix_ts_irq_info_store);
 static DEVICE_ATTR(udfps_pressed, 0660, udfps_pressed_show, NULL);
+static DEVICE_ATTR(double_tap_pressed, 0660, double_tap_pressed_show, NULL);
 
 static struct attribute *sysfs_attrs[] = {
 	&dev_attr_extmod_info.attr,
@@ -676,6 +684,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_read_cfg.attr,
 	&dev_attr_irq_info.attr,
 	&dev_attr_udfps_pressed.attr,
+	&dev_attr_double_tap_pressed.attr,
 	NULL,
 };
 
@@ -1773,6 +1782,7 @@ int goodix_ts_msm_drm_notifier_callback(struct notifier_block *self,
 		} else if (event == MSM_DRM_EVENT_BLANK && blank == MSM_DRM_BLANK_UNBLANK) {
 			//if (!atomic_read(&core_data->suspend_stat))
 			core_data->udfps_pressed = 0;
+			core_data->double_tap_pressed = 0;
 			ts_info("core_data->suspend_stat = %d\n", atomic_read(&core_data->suspend_stat));
 			ts_info("touchpanel resume");
 			queue_work(core_data->event_wq, &core_data->resume_work);
