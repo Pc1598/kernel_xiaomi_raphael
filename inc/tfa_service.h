@@ -28,9 +28,9 @@ extern "C" {
 
 /* Linux kernel module defines TFA98XX_GIT_VERSIONS in the linux_driver/Makefile */
 #ifdef TFA98XX_GIT_VERSIONS
-  #define TFA98XX_API_REV_STR "v6.7.14"/*TFA98XX_GIT_VERSIONS*/
+  #define TFA98XX_API_REV_STR "v6.9.1"/*TFA98XX_GIT_VERSIONS*/
 #else
-  #define TFA98XX_API_REV_STR "v6.7.14"
+  #define TFA98XX_API_REV_STR "v6.9.1"
 #endif
 
 #include "tfa_device.h"
@@ -38,7 +38,7 @@ extern "C" {
 /*
  * data previously defined in Tfa9888_dsp.h
  */
-#define MEMTRACK_MAX_WORDS           150
+#define MEMTRACK_MAX_WORDS           250
 #define LSMODEL_MAX_WORDS            150
 #define TFA98XX_MAXTAG              (150)
 #define FW_VAR_API_VERSION          (521)
@@ -1003,6 +1003,19 @@ int tfa_get_noclk(struct tfa_device *tfa);
  */
 
 enum Tfa98xx_Error tfa_status(struct tfa_device *tfa);
+
+
+/**
+ * @brief wait for a certain manstate to become active, until a certain loop count is reached
+ *  
+ * @param tfa the device struct pointer
+ * @param bf manstate bitfield
+ * @param wait_value manstate to wait for
+ * @param loop amount of wait cycles
+ * @return int 
+ */
+int tfa_wait4manstate(struct tfa_device *tfa, uint16_t bf, uint16_t wait_value, int loop);
+
 
 /*
  * function overload for flag_mtp_busy

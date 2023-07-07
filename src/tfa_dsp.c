@@ -47,6 +47,7 @@
 #define MIN_BATT_LEVEL 640
 #define MAX_BATT_LEVEL 670
 void tfanone_ops(struct tfa_device_ops *ops);
+void tfa9865_ops(struct tfa_device_ops *ops);
 void tfa9872_ops(struct tfa_device_ops *ops);
 void tfa9873_ops(struct tfa_device_ops *ops);
 void tfa9874_ops(struct tfa_device_ops *ops);
@@ -173,6 +174,12 @@ int tfa_irq_mask(struct tfa_device *tfa)
 {
 	int reg;
 
+	if ( tfa->dev_ops.get_mtpb ) /* new types have only 1 reg */
+	{
+		tfa_reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, 0);
+		return 0;
+	}
+
 	/* operate on all bits */
 	for (reg = TFA98XX_INTERRUPT_ENABLE_REG1; reg <= TFA98XX_INTERRUPT_ENABLE_REG1 + tfa9912_irq_max / 16; reg++)
 		tfa_reg_write(tfa, (unsigned char)reg, 0);
@@ -186,6 +193,12 @@ int tfa_irq_mask(struct tfa_device *tfa)
 int tfa_irq_unmask(struct tfa_device *tfa)
 {
 	int reg;
+
+	if ( tfa->dev_ops.get_mtpb ) /* new types have only 1 reg */
+	{
+		tfa_reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, tfa->interrupt_enable[0]);
+		return 0;
+	}
 
 	/* operate on all bits */
 	for (reg = TFA98XX_INTERRUPT_ENABLE_REG1; reg <= TFA98XX_INTERRUPT_ENABLE_REG1 + tfa9912_irq_max / 16; reg++)
@@ -224,6 +237,101 @@ int tfa_irq_set_pol(struct tfa_device *tfa, enum tfa9912_irq bit, int state)
 		return -1;
 
 	return 0;
+}
+
+/* new interrupt functions for non-coolflux devices not using tfa9912_irq defs */
+static char *tfa986x_irq_info[] = {
+	"Power on reset",
+	"Overcurrent booster",
+	"Overtemperature",
+	"Overcurrent amp",
+	"Undervoltage",
+	"TDM error",
+	"Lost clock",
+	"DC too high amp",
+	"Brown out VDDD",
+	"Clock out of range",
+	"Overvoltage protection",
+	"Qpump fail"};
+
+TFA986X_IRQ_NAMETABLE;
+
+static char *tfa987x_irq_info[] = {
+	"Power on reset",
+	"Overcurrent booster",
+	"Overtemperature",
+	"Overcurrent amp",
+	"Undervoltage",
+	"Hw mgr alarm",
+	"TDM error",
+	"Lost clock",
+	"Brown out VDDD"};
+
+TFA9878_IRQ_NAMETABLE;
+/*
+ * initialize interrupt registers
+ */
+void tfa_irq_init(struct tfa_device *tfa)
+{
+	unsigned short irqmask = tfa->interrupt_enable[0];
+
+	/* disable interrupts */
+	tfa_reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, 0); /* clear enables */
+	/* clear all active interrupts */
+	tfa_reg_write(tfa, TFA98XX_INTERRUPT_IN_REG1, 0xffff); /* clear active */
+	/* enable interrupts */
+	tfa_reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, irqmask); /* set enables */	
+
+}
+
+/*
+ * report interrupt status
+ */
+int tfa_irq_report(struct tfa_device *tfa)
+{
+	unsigned short irqmask, irqstatus, activemask;
+	int irq, irq_max, rc;
+	char **irq_info;
+	tfaIrqName_t *irq_names;
+
+	if ( tfa->dev_ops.get_mtpb ) /* new types do not have mtp */
+	{
+		irq_max = ARRAY_SIZE(tfa987x_irq_info);
+		irq_names = Tfa9878IrqNames;
+		irq_info = tfa987x_irq_info;
+	} 
+	else
+	{
+		irq_max = ARRAY_SIZE(tfa986x_irq_info);
+		irq_names = tfa986x_irq_names;
+		irq_info = tfa986x_irq_info;
+	}
+
+	/* get status bits */
+	rc = tfa_reg_read(tfa, TFA98XX_INTERRUPT_OUT_REG1, &irqstatus); /* INTERRUPT STATUSREG */
+	if (rc < 0)
+		return -rc;
+
+	irqmask = tfa->interrupt_enable[0];
+	activemask = irqmask & irqstatus;
+
+	for (irq = 0; irq < irq_max; irq++)
+	{
+		if (activemask & (1 << irq))
+			pr_err("device[%d] interrupt: %s %s\n", 
+				tfa->dev_idx, irq_names[irq].irqName, irq_info[irq]);
+	}
+
+	/* mask all to clear INT pin */
+	tfa_reg_write(tfa, TFA98XX_INTERRUPT_ENABLE_REG1, 0); 
+
+	/* clear active irqs */
+	tfa_reg_write(tfa, TFA98XX_INTERRUPT_IN_REG1, activemask);
+
+	/* unmask */
+	/* the unmask called after this return takes tfa->interrupt_enable[] */
+
+	return 0;	
 }
 
 /*
@@ -269,6 +377,16 @@ void tfa_set_query_info(struct tfa_device *tfa)
 		tfanone_ops(&tfa->dev_ops); /* register device operations via tfa hal*/
 		tfa->bus = 1;
 		break;
+	case 0x65:
+       /* tfa9865 */
+       tfa->supportDrc = supportYes;
+       tfa->tfa_family = 2;
+       tfa->spkr_count = 1;
+       tfa->is_probus_device = 1;
+       tfa->advance_keys_handling = 1; /*artf65038*/
+       tfa->daimap = Tfa98xx_DAI_TDM;
+       tfa9865_ops(&tfa->dev_ops); /* register device operations */
+       break;
 	case 0x72:
 		/* tfa9872 */
 		tfa->supportDrc = supportYes;
@@ -780,15 +898,19 @@ enum Tfa98xx_Error tfa98xx_get_mtp(struct tfa_device *tfa, uint16_t *value)
 	int status;
 	int result;
 
-	/* not possible if PLL in powerdown */
-	if (TFA_GET_BF(tfa, PWDN)) {
-		pr_debug("PLL in powerdown\n");
-		return Tfa98xx_Error_NoClock;
-	}
-	tfa98xx_dsp_system_stable(tfa, &status);
-	if (status == 0) {
-		pr_debug("PLL not running\n");
-		return Tfa98xx_Error_NoClock;
+	if(tfa->tfa_family == 1)
+	{
+		/* not possible if PLL in powerdown */
+		if (TFA_GET_BF(tfa, PWDN)) {
+			pr_debug("PLL in powerdown\n");
+			return Tfa98xx_Error_NoClock;
+		}
+
+		tfa98xx_dsp_system_stable(tfa, &status);
+		if (status == 0) {
+			pr_debug("PLL not running\n");
+			return Tfa98xx_Error_NoClock;
+		}
 	}
 
 	result = TFA_READ_REG(tfa, MTP0);
@@ -796,7 +918,7 @@ enum Tfa98xx_Error tfa98xx_get_mtp(struct tfa_device *tfa, uint16_t *value)
 		return -result;
 	}
 	*value = (uint16_t)result;
-
+	
 	return Tfa98xx_Error_Ok;
 }
 
@@ -1141,22 +1263,26 @@ static enum Tfa98xx_Error
 tfa98xx_check_ic_rom_version(struct tfa_device *tfa, const unsigned char patchheader[])
 {
 	enum Tfa98xx_Error error = Tfa98xx_Error_Ok;
-	unsigned short checkrev, revid;
-	unsigned char lsb_revid;
+	unsigned short checkrev, revid; 
+	unsigned char msb_revid, lsb_revid;
 	unsigned short checkaddress;
 	int checkvalue;
 	int value = 0;
 	int status;
 
-	checkrev = patchheader[0];
-	lsb_revid = tfa->rev & 0xff; /* only compare lower byte */
+	lsb_revid = patchheader[0];
+	msb_revid = patchheader[5];
+	checkrev = tfa->rev & 0xff; /* only compare lower byte like 9865 : 0x65; 9875 : 0x75 */
 
-	if ((checkrev != 0xFF) && (checkrev != lsb_revid))
+	if ((lsb_revid != 0xFF) && (checkrev != lsb_revid))
 		return Tfa98xx_Error_Not_Supported;
 
+	if((msb_revid & 0xF) <= 0x5)
+		msb_revid = msb_revid + 0x0a;
+		// in case the patch file contains numbers instead of HEX letters ex.: 0 = A, 1 = B
 	checkaddress = (patchheader[1] << 8) + patchheader[2];
-	checkvalue =
-		(patchheader[3] << 16) + (patchheader[4] << 8) + patchheader[5];
+	checkvalue = (patchheader[3] << 16) + (patchheader[4] << 8) + msb_revid;
+
 	if (checkaddress != 0xFFFF) {
 		/* before reading XMEM, check if we can access the DSP */
 		error = tfa98xx_dsp_system_stable(tfa, &status);
@@ -1172,7 +1298,7 @@ tfa98xx_check_ic_rom_version(struct tfa_device *tfa, const unsigned char patchhe
 		}
 		if (error == Tfa98xx_Error_Ok) {
 			if (value != checkvalue) {
-				pr_err("patch file romid type check failed [0x%04x]: expected 0x%02x, actual 0x%02x\n",
+				pr_err("patch file romid mismatch [0x%04x]: expected 0x%02x, actual 0x%02x\n",
 					checkaddress, value, checkvalue);
 				error = Tfa98xx_Error_Not_Supported;
 			}
@@ -1180,9 +1306,9 @@ tfa98xx_check_ic_rom_version(struct tfa_device *tfa, const unsigned char patchhe
 	} else { /* == 0xffff */
 	 /* check if the revid subtype is in there */
 		if (checkvalue != 0xFFFFFF && checkvalue != 0) {
-			revid = patchheader[5] << 8 | patchheader[0]; /* full revid */
+			revid = (msb_revid << 8) | lsb_revid; /* full revid */
 			if (revid != tfa->rev) {
-				pr_err("patch file device type check failed: expected 0x%02x, actual 0x%02x\n",
+				pr_err("container patch and HW mismatch: expected: 0x%02x, actual 0x%02x\n",
 					tfa->rev, revid);
 				return Tfa98xx_Error_Not_Supported;
 			}
@@ -2201,12 +2327,21 @@ enum Tfa98xx_Error tfa98xx_dsp_get_state_info(struct tfa_device *tfa, unsigned c
 enum Tfa98xx_Error tfa98xx_dsp_support_drc(struct tfa_device *tfa, int *pbSupportDrc)
 {
 	enum Tfa98xx_Error error = Tfa98xx_Error_Ok;
+	char firmware_version[4] = { 0 };
 
 	*pbSupportDrc = 0;
 
 	if (tfa->in_use == 0)
 		return Tfa98xx_Error_NotOpen;
 	if (tfa->supportDrc != supportNotSet) {
+		if (tfa->tfa_family == 2) {
+			error = tfaGetFwApiVersion(tfa, (unsigned char*)&firmware_version[0]);
+			if (error != Tfa98xx_Error_Ok) {
+				return error;
+			}
+			if (firmware_version[0] == 10) /* SB FW ProtectionOnly Config */
+				tfa->supportDrc = supportNo;
+		}
 		*pbSupportDrc = (tfa->supportDrc == supportYes);
 	} else {
 		int featureBits[2];
@@ -2735,17 +2870,17 @@ enum Tfa98xx_Error tfaGetFwApiVersion(struct tfa_device *tfa, unsigned char *pFi
 			pFirmwareVersion[3] = (buffer[2]) & 0x3f;
 			pFirmwareVersion[2] = (buffer[2] >> 6) & 0x03;
 		}
-		
+
 	}
 
-		if (1 == tfa->cnt->ndev) {
-			/* Mono configuration */
-			/* Workaround for FW 8.9.0 (FW API x.31.y.z) & above. 
-		 	  Firmware cannot return the 4th field (mono/stereo) of ITF version correctly, as it requires 
-		 	  certain set of messages to be sent before it can detect itself as a mono/stereo configuration.
-		 	  Hence, HostSDK need to handle this at system level */
-			if ((pFirmwareVersion[0] == 8) && (pFirmwareVersion[1] >= 31)) {
-				pFirmwareVersion[3] = 1;
+	if (1 == tfa->cnt->ndev) {
+		/* Mono configuration */
+		/* Workaround for FW 8.9.0 (FW API x.31.y.z) & above. Also for PO releases FW 10.x.y.z
+		   Firmware cannot return the 4th field (mono/stereo) of ITF version correctly, as it requires 
+		   certain set of messages to be sent before it can detect itself as a mono/stereo configuration.
+		   Hence, HostSDK need to handle this at system level */
+		if (((pFirmwareVersion[0] == 8) && (pFirmwareVersion[1] >= 31)) || ((pFirmwareVersion[0] == 10))) {
+			pFirmwareVersion[3] = 1;
 		}
 	}
 
@@ -3847,7 +3982,7 @@ enum Tfa98xx_Error tfa_dsp_partial_coefficients(struct tfa_device *tfa, uint8_t 
 /* fill context info */
 int tfa_dev_probe(int slave, struct tfa_device *tfa)
 {
-	uint16_t rev;
+	uint16_t rev, reg_6, msb_rev;
 
 	tfa->slave_address = (unsigned char)slave;
 
@@ -3855,6 +3990,17 @@ int tfa_dev_probe(int slave, struct tfa_device *tfa)
 	if (tfa98xx_read_register16(tfa, 3, &rev) != Tfa98xx_Error_Ok) {
 		PRINT("\nError: Unable to read revid from slave:0x%02x\n", slave);
 		return -1;
+	}
+
+	if ( (rev >> 8) == 0x98 ) /* new family has 0x98 in rev MSB */
+	{
+		/*overwriteing tfa->rev MSB with the revision number to match with older devices representation*/
+		if (tfa98xx_read_register16(tfa, 6, &reg_6) != Tfa98xx_Error_Ok) {
+		PRINT("\nError: Unable to read revid from slave:0x%02x \n", slave);
+		return -1;
+		}
+		msb_rev = (reg_6 >> 8) +0x0a;
+		rev = msb_rev << 8 | (rev & 0xff);
 	}
 
 	tfa->rev = rev;
@@ -4126,7 +4272,7 @@ enum Tfa98xx_Error tfa_status(struct tfa_device *tfa)
 {
 	int value;
 	uint16_t val;
-
+    pr_info();
 	if (tfa->dev_ops.tfa_status != NULL)
 		return(tfa->dev_ops.tfa_status(tfa));
 	/*
@@ -4163,7 +4309,7 @@ enum Tfa98xx_Error tfa_status(struct tfa_device *tfa)
 		!TFA_GET_BF_VALUE(tfa, PLLS, val) ||
 		(!(tfa->daimap & Tfa98xx_DAI_TDM) &&
 			!TFA_GET_BF_VALUE(tfa, VDDS, val)))
-		pr_err("Misc errors detected: STATUS_FLAG0 = 0x%x\n", val);
+		pr_err("Misc errors detected: STATUS_FLAG0 = 0x%x\n", val);	
 
 	if ((tfa->daimap & Tfa98xx_DAI_TDM) && (tfa->tfa_family == 2)) {
 		value = TFA_READ_REG(tfa, TDMERR); /* STATUS_FLAGS1 */
@@ -4176,6 +4322,24 @@ enum Tfa98xx_Error tfa_status(struct tfa_device *tfa)
 	}
 
 	return Tfa98xx_Error_Ok;
+}
+
+int tfa_wait4manstate(struct tfa_device *tfa, uint16_t bf, uint16_t wait_value, int loop)
+{
+	//TODO use tfa->reg_time;
+	int value, rc;
+	int loop_arg = loop;
+	do
+		value = tfa_get_bf(tfa, bf); /* read */
+	while (value < wait_value && --loop);
+
+	rc = loop ? 0 : -ETIME;
+
+	if ( rc == -ETIME )
+		pr_err( "timeout waiting for bitfield:0x%04x, value:%d, %d times\n",
+				bf, wait_value, loop_arg);
+
+	return rc;
 }
 
 #ifdef __KERNEL__
@@ -4315,89 +4479,5 @@ void tfa_adapt_noisemode(struct tfa_device *tfa)
 	}
 
 
-}
-
-int tfa_plop_noise_interrupt(struct tfa_device *tfa, int profile, int vstep)
-{
-	enum tfa_error err;
-	int no_clk = 0;
-
-	/* Remove sticky bit by reading it once */
-	TFA_GET_BF(tfa, NOCLK);
-
-	/* No clock detected */
-	if (tfa_irq_get(tfa, tfa9912_irq_stnoclk)) {
-		no_clk = TFA_GET_BF(tfa, NOCLK);
-
-		/* Detect for clock is lost! (clock is not stable) */
-		if (no_clk == 1) {
-			/* Clock is lost. Set I2CR to remove POP noise */
-			pr_info("No clock detected. Resetting the I2CR to avoid pop on 72!\n");
-			err = tfa_dev_start(tfa, profile, vstep);
-			if (err != tfa_error_ok) {
-				pr_err("Error loading i2c registers (tfa_dev_start), err=%d\n", err);
-			} else {
-				pr_info("Setting i2c registers after I2CR succesfull\n");
-				tfa_dev_set_state(tfa, TFA_STATE_UNMUTE, 0);
-			}
-
-			/* Remove sticky bit by reading it once */
-			tfa_get_noclk(tfa);
-
-			/* This is only for SAAM on the 72.
-			   Since the NOCLK interrupt is only enabled for 72 this is the place
-			   However: Not tested yet! But also does not harm normal flow!
-			*/
-			if (strstr(tfaContProfileName(tfa->cnt, tfa->dev_idx, profile), ".saam")) {
-				pr_info("Powering down from a SAAM profile, workaround PLMA4766 used!\n");
-				TFA_SET_BF(tfa, PWDN, 1);
-				TFA_SET_BF(tfa, AMPE, 0);
-				TFA_SET_BF(tfa, SAMMODE, 0);
-			}
-		}
-
-		/* If clk is stable set polarity to check for LOW (no clock)*/
-		tfa_irq_set_pol(tfa, tfa9912_irq_stnoclk, (no_clk == 0));
-
-		/* clear interrupt */
-		tfa_irq_clear(tfa, tfa9912_irq_stnoclk);
-	}
-
-	/* return no_clk to know we called tfa_dev_start */
-	return no_clk;
-}
-
-void tfa_lp_mode_interrupt(struct tfa_device *tfa)
-{
-	const int irq_stclp0 = 36; /* FIXME: this 72 interrupt does not excist for 9912 */
-	int lp0, lp1;
-
-	if (tfa_irq_get(tfa, irq_stclp0)) {
-		lp0 = TFA_GET_BF(tfa, LP0);
-		if (lp0 > 0) {
-			pr_info("lowpower mode 0 detected\n");
-		} else {
-			pr_info("lowpower mode 0 not detected\n");
-		}
-
-		tfa_irq_set_pol(tfa, irq_stclp0, (lp0 == 0));
-
-		/* clear interrupt */
-		tfa_irq_clear(tfa, irq_stclp0);
-	}
-
-	if (tfa_irq_get(tfa, tfa9912_irq_stclpr)) {
-		lp1 = TFA_GET_BF(tfa, LP1);
-		if (lp1 > 0) {
-			pr_info("lowpower mode 1 detected\n");
-		} else {
-			pr_info("lowpower mode 1 not detected\n");
-		}
-
-		tfa_irq_set_pol(tfa, tfa9912_irq_stclpr, (lp1 == 0));
-
-		/* clear interrupt */
-		tfa_irq_clear(tfa, tfa9912_irq_stclpr);
-	}
 }
 #endif//__KERNEL__
