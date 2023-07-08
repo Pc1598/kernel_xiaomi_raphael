@@ -173,8 +173,6 @@ struct tfa98xx {
 	uint16_t cal_data;
 	enum TFA_DEVICE_MUTE tfa_mute_mode;
 
-	struct device_node *spk_id_gpio_p;
-
 	struct miscdevice tfa98xx_reg;
 	struct miscdevice tfa98xx_rw;
 	struct miscdevice tfa98xx_rpc;
