@@ -3431,10 +3431,6 @@ enum tfa_error tfa_dev_start(struct tfa_device *tfa, int next_profile, int vstep
 
 error_exit:
 	tfa_show_current_state(tfa);
-	if (err != Tfa98xx_Error_Ok) {
-		pr_err("TFA98xx Error code is %d\n", err);
-		return tfa_error_max;
-	}
 	return tfa_error_ok;
 }
 
