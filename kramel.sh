@@ -115,8 +115,8 @@ elif [[ "${COMPILER}" == clang ]]; then
     )
 fi
 
-if [ ! -d "${KDIR}/anykernel3-dragonheart/" ]; then
-    git clone --depth=1 https://github.com/cyberknight777/anykernel3 -b op7 anykernel3-dragonheart
+if [ ! -d "${KDIR}/anykernel3-topaz/" ]; then
+    git clone --depth=1 https://github.com/Pc1598/AnyKernel3-Topaz -b master anykernel3-topaz
 fi
 
 if [ ! -f "${KDIR}/version" ]; then
@@ -203,10 +203,10 @@ img() {
     rgn
     echo -e "\n\e[1;93m[*] Building Kernel! \e[0m"
     BUILD_START=$(date +"%s")
-    time make -j"$PROCS" "${MAKE[@]}" Image 2>&1 | tee log.txt
+    time make -j"$PROCS" "${MAKE[@]}" Image.gz-dtb 2>&1 | tee log.txt
     BUILD_END=$(date +"%s")
     DIFF=$((BUILD_END - BUILD_START))
-    if [ -f "${KDIR}/out/arch/arm64/boot/Image" ]; then
+    if [ -f "${KDIR}/out/arch/arm64/boot/Image.gz-dtb" ]; then
         if [[ "${TGI}" == "1" ]]; then
             tg "*Kernel Built after $((DIFF / 60)) minute(s) and $((DIFF % 60)) second(s)*"
         fi
@@ -224,7 +224,7 @@ img() {
 dtb() {
     rgn
     echo -e "\n\e[1;93m[*] Building DTBS! \e[0m"
-    time make -j"$PROCS" "${MAKE[@]}" dtbs dtbo.img dtb.img
+    time make -j"$PROCS" "${MAKE[@]}" dtbs dtbo.img
     echo -e "\n\e[1;32m[✓] Built DTBS! \e[0m"
 }
 
@@ -239,7 +239,7 @@ mod() {
     make "${MAKE[@]}" modules_prepare
     make -j"$PROCS" "${MAKE[@]}" modules INSTALL_MOD_PATH="${KDIR}"/out/modules
     make "${MAKE[@]}" modules_install INSTALL_MOD_PATH="${KDIR}"/out/modules
-    find "${KDIR}"/out/modules -type f -iname '*.ko' -exec cp {} "${KDIR}"/anykernel3-dragonheart/modules/system/lib/modules/ \;
+    find "${KDIR}"/out/modules -type f -iname '*.ko' -exec cp {} "${KDIR}"/anykernel3-topaz/modules/system/lib/modules/ \;
     echo -e "\n\e[1;32m[✓] Built Modules! \e[0m"
 }
 
@@ -249,11 +249,9 @@ mkzip() {
         tg "*Building zip!*"
     fi
     echo -e "\n\e[1;93m[*] Building zip! \e[0m"
-    mkdir -p "${KDIR}"/anykernel3-dragonheart/dtbs
-    mv "${KDIR}"/out/arch/arm64/boot/dtbo.img "${KDIR}"/anykernel3-dragonheart
-    mv "${KDIR}"/out/arch/arm64/boot/dtb.img "${KDIR}"/anykernel3-dragonheart
-    mv "${KDIR}"/out/arch/arm64/boot/Image "${KDIR}"/anykernel3-dragonheart
-    cd "${KDIR}"/anykernel3-dragonheart || exit 1
+    mv "${KDIR}"/out/arch/arm64/boot/dtbo.img "${KDIR}"/anykernel3-topaz
+    mv "${KDIR}"/out/arch/arm64/boot/Image.gz-dtb "${KDIR}"/anykernel3-topaz
+    cd "${KDIR}"/anykernel3-topaz || exit 1
     zip -r9 "$zipn".zip . -x ".git*" -x "README.md" -x "LICENSE" -x "*.zip"
     echo -e "\n\e[1;32m[✓] Built zip! \e[0m"
     if [[ "${OTA}" == "1" ]]; then
@@ -268,7 +266,7 @@ mkzip() {
 	    echo "
 {
   \"kernel\": {
-  \"name\": \"DragonHeart\",
+  \"name\": \"Topaz\",
   \"version\": \"$VERSION\",
   \"link\": \"https://github.com/cyberknight777/op7_json/releases/download/$VERSION/$zipn.zip\",
   \"changelog_url\": \"https://raw.githubusercontent.com/cyberknight777/op7_json/master/changelog_r.md\",
@@ -276,7 +274,7 @@ mkzip() {
   \"sha1\": \"$sha1\"
   },
   \"support\": {
-    \"link\": \"https://t.me/knightschat\"
+    \"link\": \"https://t.me/genhodee\"
   }
 }
 " > DragonHeart-r.json
